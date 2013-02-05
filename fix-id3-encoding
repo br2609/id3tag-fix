@@ -1,0 +1,93 @@
+#!/usr/bin/env python2
+from mutagen.easyid3 import EasyID3
+import sys
+import cmd
+import optparse
+
+class Main(cmd.Cmd):
+    ################# DEFAULTS ###################
+    tags = ['artist','title','album','performer']
+    encodings = ['utf8','big5','gbk','gb18030',
+        'hkscs','euc-kr','euc-jp','shift-jis']
+    ##############################################
+
+    prompt = '> '
+    prompt2 = '... '
+    _fix = lambda self, s, enc: ''.join(map(chr,map(ord, s))).decode(enc, 'ignore')
+
+    def __init__(self, easyid3):
+        cmd.Cmd.__init__(self)
+        self.easyid3 = easyid3
+        print Main.tags, Main.encodings
+        Main.tags = filter(easyid3.has_key, Main.tags)
+
+    def preloop(self):
+        print "Original: ", u', '.join([self.easyid3[tag][0] for tag in Main.tags]), "\n"
+        for i, enc in zip(range(len(Main.encodings)), Main.encodings):
+            try:
+                s = u', '.join([self._fix(self.easyid3[tag][0], enc) for tag in Main.tags])
+            except ValueError:
+                s = "<failed>"
+            print i, enc+':', s
+
+    def do_help(self, arg=''):
+        print "Type: 'encoding <number>' to choose an encoding, save and quit."
+
+    def do_EOF(self, arg=''):
+        self.do_quit()
+    def do_exit(self, arg=''):
+        self.do_quit()
+    def do_q(self, arg=''):
+        self.do_quit()
+    def do_quit(self, arg=''):
+        print
+        sys.exit(1)
+
+    def do_encoding(self, enc):
+        try: i = int(enc)
+        except ValueError: return
+        if not (0 <= i < len(Main.encodings)):
+            return
+        
+        for tag in Main.tags:
+            self.easyid3[tag] = self._fix(self.easyid3[tag][0], Main.encodings[i])
+        self.easyid3.save()
+        print "Changed", len(Main.tags), "ID3 tags."
+        sys.exit(0)
+
+# from http://docs.python.org/2/library/optparse.html
+class ListOption(optparse.Option):
+    ACTIONS = optparse.Option.ACTIONS + ("extend",)
+    STORE_ACTIONS = optparse.Option.STORE_ACTIONS + ("extend",)
+    TYPED_ACTIONS = optparse.Option.TYPED_ACTIONS + ("extend",)
+    ALWAYS_TYPED_ACTIONS = optparse.Option.ALWAYS_TYPED_ACTIONS + ("extend",)
+
+    def take_action(self, action, dest, opt, value, values, parser):
+        if action == "extend":
+            lvalue = value.split(",")
+            values.ensure_value(dest, []).extend(lvalue)
+        else:
+            optparse.Option.take_action(
+                self, action, dest, opt, value, values, parser)
+
+if __name__ == '__main__':
+    parser = optparse.OptionParser(
+            usage="usage: %prog [options] filename",
+            option_class=ListOption)
+    parser.add_option('-e', '--encodings', action='extend',
+            help="encodings available in the menu (see Python's list)")
+    parser.add_option('-t', '--tags', action='extend',
+            help="ID3 tags available in the menu (see mutagen.easyid3 list)")
+    options, args = parser.parse_args()
+
+    if len(args) != 1:
+        parser.error("incorrect number of arguments")
+
+    if options.encodings:
+        Main.encodings = options.encodings
+    if options.tags:
+        Main.tags = options.tags
+
+    t = EasyID3(args[0])
+    Main(t).cmdloop()
+
